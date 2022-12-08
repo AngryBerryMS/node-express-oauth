@@ -54,6 +54,10 @@ app.use(bodyParser.urlencoded({ extended: true }))
 Your code here
 */
 
+app.get("/authorize", (req, res) => {
+	res.send(200)
+})
+
 const server = app.listen(config.port, "localhost", function () {
 	var host = server.address().address
 	var port = server.address().port
