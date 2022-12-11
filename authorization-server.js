@@ -94,7 +94,7 @@ app.post("/approve", (req, res) => {
 		return;
 	}
 	let clientRrequest = requests[request_id];
-	delete[request_id];
+	delete requests[request_id];
 	let authCodeKey = randomString();
 	authorizationCodes[authCodeKey] =
 		{
@@ -131,6 +131,7 @@ app.post("/token", (req, res) => {
 	}
 
 	let authCodeKeyValue = authorizationCodes[authCodeKey];
+	delete authorizationCodes[authCodeKey];
 	let tokenObj = {
 		userName: authCodeKeyValue.userName,
 		scope: authCodeKeyValue.clientReq.scope
