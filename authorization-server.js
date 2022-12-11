@@ -56,72 +56,98 @@ Your code here
 */
 
 app.get("/authorize", (req, res) => {
-	var client_id = req.query["client_id"];
-	if (client_id in clients) {
-		// verify scopes
-		var defined_scopes = clients[client_id].scopes
-		var request_scopes = req.query.scopes.split(" ")
-		if (containsAll(defined_scopes, request_scopes)) {
-			var request_id = randomString();
-			requests[request_id] = req.query;
-			res.render("login", { 'client': clients[client_id], 'scope': req.query.scopes, 'requestId': request_id });
-		} else {
-			res.send(401);
-		}
+	let client_id = req.query["client_id"];
+	if (!client_id || !(client_id in clients)){
+		res.send(401);
+		return;
+	}
+	// verify scopes
+	let defined_scopes = clients[client_id].scopes
+	let request_scopes = req.query.scope.split(" ")
+	if (containsAll(defined_scopes, request_scopes)) {
+		let request_id = randomString();
+		requests[request_id] = req.query;
+		res.render(
+			"login",
+			{
+				'client': clients[client_id],
+				'scope': req.query.scope,
+				'requestId': request_id,
+			});
 	} else {
 		res.send(401);
 	}
 })
 
 app.post("/approve", (req, res) => {
-	var username = req.body["userName"];
-	var password = req.body["password"];
-	var request_id = req.body["requestId"]
-	if (username in users && password == users[username]) {
-		if (request_id in requests) {
-			var request = requests[request_id];
-			var authCodeKey = randomString();
-			authorizationCodes[authCodeKey] = { clientReq: request, userName: username };
-			const redirectUri = url.parse(request.redirect_url);
-			redirectUri.query = {
-				code:authCodeKey,
-				state: request.state,
-			};
-			uri = url.format(redirectUri)
-			res.redirect(uri);
-		} else {
-			 res.send(401);
-		}
-	} else {
+	let username = req.body["userName"];
+	let password = req.body["password"];
+	let request_id = req.body["requestId"];
+
+	if (!(username in users) || !(password == users[username])) {
 		res.send(401);
+		return;
 	}
+
+	if (!(request_id in requests)) {
+		res.send(401);
+		return;
+	}
+	let clientRrequest = requests[request_id];
+	delete[request_id];
+	let authCodeKey = randomString();
+	authorizationCodes[authCodeKey] =
+		{
+			clientReq: clientRrequest,
+			userName: username
+		};
+	const redirectUri = url.parse(clientRrequest.redirect_uri);
+	redirectUri.query = {
+		code: authCodeKey,
+		state: clientRrequest.state,
+	};
+	uri = url.format(redirectUri)
+	res.redirect(uri);
 })
 
 app.post("/token", (req, res) => {
-	if ("authorization" in req.header) {
-		var {client_id, client_secret} = decodeAuthCredentials(req.headers.authorization);
-		if (clients[client_id].clientSecret == client_secret) {
-			var authCodeKey = req.body["code"];
-			if (authCodeKey in authorizationCodes) {
-				var authCodeKeyValue = authorizationCodes[authCodeKey];
-				var tokenObj = {
-					userName: authCodeKeyValue.userName,
-					scope: authCodeKeyValue.request.scopes
-				};
-				var jwtToken = jwt.sign(tokenObj, config.privateKey, {algorithm: "RSA256"});
-				res.json({
-					"access_token": jwtToken,
-					"token_type": "Bearer"
-				});
-			} else {
-				return res.send(401);
-			}
-		} else {
-			return res.send(401);
-		}
-	} else {
+	let headerAuth = req.headers.authorization;
+	if (!headerAuth) {
 		res.send(401);
+		return;
 	}
+
+	let {clientId, clientSecret} = decodeAuthCredentials(headerAuth);
+	let client = clients[clientId];
+	if (!client || client.clientSecret != clientSecret) {
+		res.send(401);
+		return;
+	}
+
+	let authCodeKey = req.body["code"];
+	if (!authCodeKey || !authorizationCodes[authCodeKey]) {
+		res.send(401);
+		return;
+	}
+
+	let authCodeKeyValue = authorizationCodes[authCodeKey];
+	let tokenObj = {
+		userName: authCodeKeyValue.userName,
+		scope: authCodeKeyValue.clientReq.scope
+	};
+	let jwtToken = jwt.sign(
+		tokenObj,
+		config.privateKey,
+		{
+			algorithm: "RS256",
+			expiresIn: 300,
+			issuer: "http://localhost:" + config.port,
+		});
+	res.json({
+		"access_token": jwtToken,
+		"token_type": "Bearer",
+		scope: authCodeKeyValue.clientReq.scope
+	});
 })
 
 const server = app.listen(config.port, "localhost", function () {
